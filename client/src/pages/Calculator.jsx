@@ -274,8 +274,11 @@ function calcShooting({
       // (auto-hits from Accurate don't satisfy Rending's "HIT result" condition)
       if (rending && fc >= 1 && h >= 1) { fc += 1; fh -= 1; }
 
-      // Normal to Crit: if ≥1 normal, convert one → crit (regardless of existing crits)
-      if (normalToCrit && fh >= 1) { fc += 1; fh -= 1; }
+      // Normal to Crit: convert up to normalToCrit normals → crits
+      if (normalToCrit > 0 && fh >= 1) {
+        const convert = Math.min(normalToCrit, fh);
+        fc += convert; fh -= convert;
+      }
 
       // Devastating MWx: each crit deals mw immediate mortal wounds (unsaveable)
       // Crits STILL enter the save pool and surviving crits deal critDmg on top.
@@ -607,6 +610,12 @@ const MW_OPTIONS = [
   { value: 3, label: 'MW 3' },
   { value: 4, label: 'MW 4' },
 ];
+const NORMAL_TO_CRIT_OPTIONS = [
+  { value: 1, label: '1 normal → crit' },
+  { value: 2, label: '2 normals → crits' },
+  { value: 3, label: '3 normals → crits' },
+  { value: 4, label: '4 normals → crits' },
+];
 
 // ── Default state ─────────────────────────────────────────────────────────────
 const SHOOT_DEFAULTS = {
@@ -614,7 +623,7 @@ const SHOOT_DEFAULTS = {
   dmgNorm: 3, dmgCrit: 4, ap: 0,
   defDice: 3, saveRoll: 4, saveCritRoll: 6, wounds: 8,
   severe: false, rending: false, devastating: false, mw: 1,
-  brutal: false, ceaseless: false, relentless: false, punishing: false, puritySeal: false, balanced: false, normalToCrit: false, invulnSave: false,
+  brutal: false, ceaseless: false, relentless: false, punishing: false, puritySeal: false, balanced: false, normalToCrit: 0, invulnSave: false,
 };
 
 const FIGHT_DEFAULTS = {
@@ -666,7 +675,7 @@ function ShootingTab() {
     punishing:  parseBool(sp.get('s_pu')),
     puritySeal: parseBool(sp.get('s_ps')),
     balanced:     parseBool(sp.get('s_ba')),
-    normalToCrit: parseBool(sp.get('s_nc')),
+    normalToCrit: parseNum(sp.get('s_nc'), 0),
     invulnSave:   parseBool(sp.get('s_is')),
   }));
 
@@ -686,7 +695,7 @@ function ShootingTab() {
       s_rl: s.relentless ? '1' : '0', s_pu: s.punishing ? '1' : '0',
       s_ps: s.puritySeal ? '1' : '0',
       s_ba: s.balanced     ? '1' : '0',
-      s_nc: s.normalToCrit ? '1' : '0',
+      s_nc: s.normalToCrit,
       s_is: s.invulnSave   ? '1' : '0',
     });
     navigator.clipboard.writeText(window.location.origin + '/calculator?' + p.toString());
@@ -718,8 +727,13 @@ function ShootingTab() {
           <Toggle label="Purity Seal"    checked={s.puritySeal}   onChange={v => set('puritySeal', v)} />
           <Toggle label="Balanced"       checked={s.balanced}     onChange={v => set('balanced', v)} />
           {/* Row 5: Normal to Crit | Devastating */}
-          <Toggle label="Normal to Crit" checked={s.normalToCrit} onChange={v => set('normalToCrit', v)} />
+          <Toggle label="Normal to Crit" checked={s.normalToCrit > 0} onChange={v => set('normalToCrit', v ? 1 : 0)} />
           <Toggle label="Devastating"    checked={s.devastating}  onChange={v => set('devastating', v)} />
+          {s.normalToCrit > 0 && (
+            <div className="col-span-2 pl-4">
+              <SelectField label="Normal to Crit" value={s.normalToCrit} onChange={v => set('normalToCrit', v)} options={NORMAL_TO_CRIT_OPTIONS} />
+            </div>
+          )}
           {s.devastating && (
             <div className="col-span-2 pl-4">
               <SelectField label="Mortal Wounds" value={s.mw} onChange={v => set('mw', v)} options={MW_OPTIONS} />
