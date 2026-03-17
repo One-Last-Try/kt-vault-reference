@@ -5,11 +5,10 @@ import axios from 'axios';
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const FILTER_PILLS = [
-  { label: 'Rules',     to: '/rules' },
-  { label: 'Datacards', to: '/teams' },
-  { label: 'Teams',     to: '/teams' },
-  { label: 'Tac Ops',   to: '/teams' },
-  { label: 'Ploys',     to: '/teams' },
+  { label: 'Rules',   to: '/rules' },
+  { label: 'Teams',   to: '/teams' },
+  { label: 'Tac Ops', to: '/teams' },
+  { label: 'Ploys',   to: '/teams' },
 ];
 
 const TIER_PREVIEW = [
