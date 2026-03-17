@@ -7,7 +7,7 @@ const DB_PATH = join(__dirname, '..', 'ktref.sqlite');
 
 const db = new Database(DB_PATH);
 
-db.pragma('journal_mode = WAL');
+db.pragma('journal_mode = DELETE'); // avoid WAL shm/wal files on Railway
 db.pragma('foreign_keys = ON');
 
 db.exec(`
