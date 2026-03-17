@@ -1,6 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Client is created lazily so a missing API key doesn't crash the server on startup
+let client = null;
+function getClient() {
+  if (!client) client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  return client;
+}
 
 const SYSTEM_PROMPT = `You are a Kill Team rules extractor. Given raw text extracted from a Kill Team PDF, return ONLY valid JSON with no preamble, explanation, or markdown fences. Do not write anything before or after the JSON object.
 
@@ -52,7 +57,7 @@ function stripMarkdown(text) {
 
 export async function processWithAI(text, filename) {
   try {
-    const message = await client.messages.create({
+    const message = await getClient().messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 4000,
       system: SYSTEM_PROMPT,
