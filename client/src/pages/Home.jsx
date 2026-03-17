@@ -7,8 +7,8 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const FILTER_PILLS = [
   { label: 'Rules',   to: '/rules' },
   { label: 'Teams',   to: '/teams' },
-  { label: 'Tac Ops', to: '/teams' },
-  { label: 'Ploys',   to: '/teams' },
+  { label: 'Tac Ops', to: '/teams?tab=tac_op' },
+  { label: 'Ploys',   to: '/teams?tab=ploy' },
 ];
 
 const TIER_PREVIEW = [

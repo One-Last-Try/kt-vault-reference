@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -275,6 +276,9 @@ function OperativeCard({ op }) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function Teams() {
+  const [searchParams] = useSearchParams();
+  const urlTab = searchParams.get('tab'); // e.g. 'tac_op' or 'ploy'
+
   const [factions, setFactions]     = useState([]);
   const [selected, setSelected]     = useState(null);
   const [teamRules, setTeamRules]   = useState([]);
@@ -302,9 +306,12 @@ export default function Teams() {
         const rules = rulesRes.data.filter(r => r.faction_id === selected.id);
         setTeamRules(rules);
         setOperatives(cardsRes.data);
-        // Set first available tab
+        // Set active tab — prefer URL param if that tab has content
         const ruleTypes = new Set(rules.map(r => r.type));
-        const firstTab = TAB_ORDER.find(t => t === 'operative' ? cardsRes.data.length > 0 : ruleTypes.has(t));
+        const hasTab = t => t === 'operative' ? cardsRes.data.length > 0 : ruleTypes.has(t);
+        const firstTab = (urlTab && hasTab(urlTab))
+          ? urlTab
+          : TAB_ORDER.find(hasTab);
         setActiveTab(firstTab || 'faction_rules');
       })
       .catch(() => { setTeamRules([]); setOperatives([]); })
