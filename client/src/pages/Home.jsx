@@ -4,7 +4,13 @@ import axios from 'axios';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-const FILTER_PILLS = ['Rules', 'Datacards', 'Teams', 'Tac Ops', 'Ploys'];
+const FILTER_PILLS = [
+  { label: 'Rules',     to: '/rules' },
+  { label: 'Datacards', to: '/teams' },
+  { label: 'Teams',     to: '/teams' },
+  { label: 'Tac Ops',   to: '/teams' },
+  { label: 'Ploys',     to: '/teams' },
+];
 
 const TIER_PREVIEW = [
   { id: 'S', colour: '#FFD700', chips: ['Angels of Death', 'Deathwatch', 'Kasrkin'] },
@@ -29,8 +35,7 @@ const TYPE_BADGE = {
 
 // ── Hero ──────────────────────────────────────────────────────────────────────
 function Hero() {
-  const [query, setQuery]   = useState('');
-  const [active, setActive] = useState('Rules');
+  const [query, setQuery] = useState('');
   const navigate = useNavigate();
 
   function handleSearch(e) {
@@ -62,16 +67,12 @@ function Hero() {
       </form>
 
       {/* Filter pills */}
-      <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="Filter by content type">
+      <div className="flex flex-wrap justify-center gap-2" aria-label="Browse by content type">
         {FILTER_PILLS.map(p => (
-          <button key={p} onClick={() => setActive(p)}
-            aria-pressed={active === p}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors
-              ${active === p
-                ? 'border-[#D94819] text-[#D94819] bg-[#D94819]/10'
-                : 'border-[#2a2a3e] text-[#8a8a9a] hover:text-[#e0e0f0]'}`}>
-            {p}
-          </button>
+          <Link key={p.label} to={p.to}
+            className="text-xs px-3 py-1.5 rounded-full border border-[#2a2a3e] text-[#8a8a9a] hover:text-[#e0e0f0] hover:border-[#D94819]/60 transition-colors">
+            {p.label}
+          </Link>
         ))}
       </div>
     </section>
