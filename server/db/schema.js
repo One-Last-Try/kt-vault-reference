@@ -2,6 +2,7 @@ import { createRequire } from 'module';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { seed } from './seed.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH   = join(__dirname, '..', 'ktref.sqlite');
@@ -156,5 +157,7 @@ db.exec(`
     created_at TEXT DEFAULT (datetime('now'))
   );
 `);
+
+seed(db);
 
 export default db;
