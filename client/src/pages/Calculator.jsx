@@ -17,35 +17,20 @@ function C(n, k) {
 }
 
 /**
- * Given n dice each with P(crit)=pc and P(hit)=ph (and P(miss)=1-pc-ph),
- * returns a 2D array prob[c][h] = probability of exactly c crits and h hits.
- * With Ceaseless: each miss is re-rolled once. With Relentless: each miss re-rolled until hit/crit.
+ * Base roll distribution — no rerolls applied here.
+ * Relentless: reroll any dice once each (optimal = reroll all fails).
+ *   Baked into effective probabilities: pc' = pc + pm·pc, ph' = ph + pm·ph
+ * Ceaseless: handled separately via applyCeaselessTransform.
  */
-function rollDistribution(n, pc, ph, ceaseless, relentless) {
+function rollDistribution(n, pc, ph, relentless = false) {
   let effectivePc = pc;
   let effectivePh = ph;
 
   if (relentless) {
-    // Each die: P(crit) = pc/(pc+ph), P(hit) = ph/(pc+ph) — no misses
-    const pSuccess = pc + ph;
-    if (pSuccess > 0) {
-      effectivePc = pc; // absolute unchanged
-      effectivePh = ph;
-      // Re-roll until non-miss: P(crit) = pc / (pc+ph), P(hit) = ph/(pc+ph)
-      effectivePc = pc / pSuccess * pSuccess; // = pc, but normalised: each die hits/crits
-      effectivePh = ph / pSuccess * pSuccess; // = ph
-      // Actually with relentless p(miss) → 0:
-      effectivePc = pc;
-      effectivePh = ph;
-      // Simplified: treat as if pm=0 and scale
-      effectivePc = pc;
-      effectivePh = pSuccess > 0 ? (1 - pc) : 0;
-    }
-  } else if (ceaseless) {
     const pm = 1 - pc - ph;
-    // Each miss: re-rolled once. Effective pc' = pc + pm*pc, ph' = ph + pm*ph
     effectivePc = pc + pm * pc;
     effectivePh = ph + pm * ph;
+    // effectivePm = pm² (each fail rerolled once)
   }
 
   const pm = Math.max(0, 1 - effectivePc - effectivePh);
@@ -67,124 +52,270 @@ function rollDistribution(n, pc, ph, ceaseless, relentless) {
 }
 
 /**
- * Compute damage dealt given c crits and h hits, save roll params.
- * Returns expected damage (float).
+ * Ceaseless (RerollMostCommonFail): rerolls all dice showing one fail face —
+ * the face that appeared the most times. For m fails on k distinct fail faces,
+ * returns { r: probability } where r is the number of dice that get rerolled.
+ *
+ * Algorithm: enumerate all sorted partitions of m into k non-negative parts.
+ * For each partition [d0≥d1≥…≥dk-1], the reroll count is d0 (the max).
+ * Weight = multinomial(m; d0,…,dk-1) × (distinct arrangements of bucket labels).
  */
-function computeDamage({ c, h, dmgNorm, dmgCrit, ap, saveRoll, saveCritRoll,
-  severe, rending, devastating, mw, brutal }) {
+function getCeaselessRerollCountProbs(numFailFaces, numFails) {
+  const k = numFailFaces;
+  const m = numFails;
+  if (m === 0 || k === 0) return { 0: 1.0 };
 
-  // Rending: for each crit, if any normal hit → convert one normal to crit
-  let crits = c;
-  let hits  = h;
+  const total = Math.pow(k, m);
+  const accum = {};
+  const buckets = new Array(k).fill(0);
 
-  if (rending && crits > 0 && hits > 0) {
-    // Convert one hit to crit per crit (spec says 1 hit→crit when you have ≥1 crit)
-    const convert = Math.min(crits, hits);
-    crits += convert;
-    hits  -= convert;
-  }
-
-  // Severe: crits deal dmgNorm + extra (dmgCrit) → treat crit as dmgCrit
-  // (already handled by using dmgCrit for crits below)
-
-  // Devastating (MWx): each crit causes x mortal wounds (bypasses saves) and no normal save
-  let mortalWounds = 0;
-  let normalSaveAttacks = 0;
-  let critSaveAttacks   = 0;
-
-  if (devastating) {
-    mortalWounds     = crits * mw;
-    normalSaveAttacks = hits;
-    critSaveAttacks   = 0; // devastating crits skip saves
-  } else {
-    normalSaveAttacks = hits;
-    critSaveAttacks   = crits;
-  }
-
-  // Saves
-  // Effective save after AP
-  const effectiveSave = clamp(saveRoll + ap, 2, 7); // 7 = never saves
-  const effectiveCritSave = clamp(saveCritRoll + ap, 2, 7);
-
-  const pSaveNorm = effectiveSave >= 7 ? 0 : Math.max(0, (7 - effectiveSave) / 6);
-  const pSaveCrit = effectiveCritSave >= 7 ? 0 : Math.max(0, (7 - effectiveCritSave) / 6);
-
-  // Expected damage from normal hits
-  const dmgFromHits  = normalSaveAttacks * dmgNorm * (1 - pSaveNorm);
-  // Expected damage from crit hits
-  const dmgFromCrits = critSaveAttacks   * dmgCrit * (1 - pSaveCrit);
-  // Brutal: each hit with at least 1 crit also deals dmgNorm extra if crit > 0?
-  // Spec: "Brutal: +1 damage to all normal hits when ≥1 crit scored"
-  let brutalBonus = 0;
-  if (brutal && crits > 0) {
-    brutalBonus = normalSaveAttacks * 1 * (1 - pSaveNorm);
-  }
-
-  return mortalWounds + dmgFromHits + dmgFromCrits + brutalBonus;
-}
-
-/**
- * Main shooting calculator.
- * Returns { avgDamage, killChance, distribution: [{totalDmg, prob}] }
- */
-function calcShooting({
-  attackDice, bs, lethalX,
-  dmgNorm, dmgCrit, ap,
-  saveRoll, saveCritRoll, wounds,
-  severe, rending, devastating, mw,
-  brutal, ceaseless, relentless, punishing,
-}) {
-  // BS = X+ means P(hit) = (7 - bs) / 6, P(crit) = 1/6 (on a 6)
-  // Lethal X+: rolls of X+ are also crits
-  const critFaces  = lethalX > 0 ? clamp(7 - lethalX, 0, 6) : 1; // faces that are crits
-  const totalFaces = 6;
-  const pc = critFaces / totalFaces;
-  const ph = Math.max(0, (7 - bs) / 6 - pc);
-
-  const dist = rollDistribution(attackDice, pc, ph, ceaseless, relentless);
-
-  // For each (c, h) combination, compute damage
-  const dmgMap = new Map(); // dmg → probability
-
-  for (let c = 0; c <= attackDice; c++) {
-    for (let h = 0; h <= attackDice - c; h++) {
-      const p = dist[c][h];
-      if (p < 1e-15) continue;
-
-      // Punishing: each hit that saves still deals 1 MW
-      // We'll incorporate this separately
-      let expectedDmg = computeDamage({
-        c, h, dmgNorm, dmgCrit, ap, saveRoll, saveCritRoll,
-        severe, rending, devastating, mw, brutal,
-      });
-
-      if (punishing) {
-        // Each saved normal hit → 1 MW
-        const effectiveSave = clamp(saveRoll + ap, 2, 7);
-        const pSaveNorm = effectiveSave >= 7 ? 0 : Math.max(0, (7 - effectiveSave) / 6);
-        expectedDmg += h * 1 * pSaveNorm;
-      }
-
-      // Round to 1 decimal for distribution bucketing
-      const dmgKey = Math.round(expectedDmg * 10) / 10;
-      dmgMap.set(dmgKey, (dmgMap.get(dmgKey) || 0) + p);
+  function enumerate(pos, remaining, maxVal) {
+    if (pos === k - 1) {
+      if (remaining > maxVal) return;
+      buckets[pos] = remaining;
+      // Multinomial: m! / (b0! * b1! * … * b_{k-1}!) computed via binomials
+      let mult = 1, rem = m;
+      for (let i = 0; i < k; i++) { mult *= C(rem, buckets[i]); rem -= buckets[i]; }
+      // Distinct label permutations: k! / product(freq_of_each_value!)
+      const freq = {};
+      for (const v of buckets) freq[v] = (freq[v] || 0) + 1;
+      let kFact = 1;
+      for (let i = 1; i <= k; i++) kFact *= i;
+      let permDenom = 1;
+      for (const f of Object.values(freq)) { let fi = 1; for (let i = 1; i <= f; i++) fi *= i; permDenom *= fi; }
+      mult *= kFact / permDenom;
+      const r = buckets[0];
+      accum[r] = (accum[r] || 0) + mult;
+      return;
+    }
+    const minForThis = Math.ceil(remaining / (k - pos));
+    for (let v = Math.min(maxVal, remaining); v >= minForThis; v--) {
+      buckets[pos] = v;
+      enumerate(pos + 1, remaining - v, v);
     }
   }
 
-  let avgDamage = 0;
-  let killChance = 0;
-  const distribution = [];
+  enumerate(0, m, m);
 
+  const result = {};
+  for (const [r, cnt] of Object.entries(accum)) {
+    result[Number(r)] = cnt / total;
+  }
+  return result;
+}
+
+/**
+ * Applies the Ceaseless reroll transform to a (c,h) probability distribution.
+ * numFailFaces = bs - 1 (die faces 1…bs-1 are misses).
+ */
+function applyCeaselessTransform(dist, n, pc, ph, numFailFaces) {
+  const pm = Math.max(0, 1 - pc - ph);
+  if (pm < 1e-12 || numFailFaces === 0) return dist;
+
+  const newDist = Array.from({ length: n + 1 }, () => new Float64Array(n + 1));
+
+  for (let c = 0; c <= n; c++) {
+    for (let h = 0; h <= n - c; h++) {
+      const p = dist[c][h];
+      if (p < 1e-15) continue;
+      const m = n - c - h;
+      if (m === 0) { newDist[c][h] += p; continue; }
+
+      const rerollProbs = getCeaselessRerollCountProbs(numFailFaces, m);
+
+      for (const [rStr, pReroll] of Object.entries(rerollProbs)) {
+        const r = Number(rStr);
+        if (r === 0) { newDist[c][h] += p * pReroll; continue; }
+        // Reroll r dice: each can become crit (pc), hit (ph), or fail (pm)
+        for (let dc = 0; dc <= r; dc++) {
+          for (let dh = 0; dh <= r - dc; dh++) {
+            const pRoll = C(r, dc) * C(r - dc, dh)
+              * Math.pow(pc, dc) * Math.pow(ph, dh) * Math.pow(pm, r - dc - dh);
+            if (pRoll < 1e-15) continue;
+            newDist[c + dc][h + dh] += p * pReroll * pRoll;
+          }
+        }
+      }
+    }
+  }
+
+  return newDist;
+}
+
+/**
+ * KT24 save system: defender rolls d dice.
+ * Crit save (≥ critSave): cancels any 1 hit (crit or normal).
+ * Normal save (≥ save, < critSave): cancels 1 normal hit. Two normal saves cancel 1 crit.
+ * Brutal: normal saves are disabled — only crit saves work.
+ *
+ * Optimal save assignment: tries both orderings (normals-first / crits-first for normal saves)
+ * and picks whichever results in less damage.
+ */
+function applyOptimalSaves(crits, norms, cs, ns, dmgCrit, dmgNorm) {
+  function calc(normSavesOnNormsFirst) {
+    let rc = crits, rn = norms, rcs = cs, rns = ns;
+    // Crit saves on crits first (always optimal since dmgCrit ≥ dmgNorm)
+    const c1 = Math.min(rcs, rc); rc -= c1; rcs -= c1;
+    if (normSavesOnNormsFirst) {
+      // Normal saves cancel normals, leftover pairs cancel crits
+      const n1 = Math.min(rns, rn); rn -= n1; rns -= n1;
+      const c2 = Math.min(Math.floor(rns / 2), rc); rc -= c2;
+    } else {
+      // Normal saves trade 2:1 for crits first, leftover cancel normals
+      const c2 = Math.min(Math.floor(rns / 2), rc); rc -= c2; rns -= c2 * 2;
+      const n1 = Math.min(rns, rn); rn -= n1;
+    }
+    // Remaining crit saves cancel normals
+    const n2 = Math.min(rcs, rn); rn -= n2;
+    return rc * dmgCrit + rn * dmgNorm;
+  }
+  return Math.min(calc(true), calc(false));
+}
+
+/**
+ * Main shooting calculator — KT24 correct save model.
+ * Defender rolls defDice dice (reduced by piercing). Each die:
+ *   ≥ critSave → crit save (cancels any hit)
+ *   ≥ save     → normal save (cancels a normal hit; 2 normal saves cancel 1 crit)
+ * Brutal: normal saves disabled.
+ * Returns { avgDamage, killChance, distribution: [{totalDmg, prob}] }
+ */
+function calcShooting({
+  attackDice, bs, lethalX, accurateX,
+  dmgNorm, dmgCrit, ap, defDice,
+  saveRoll, saveCritRoll, wounds,
+  severe, rending, devastating, mw,
+  brutal, ceaseless, relentless, punishing, puritySeal, balanced, normalToCrit, invulnSave,
+}) {
+  // Accurate X: these dice auto-succeed as normal hits, rest are rolled
+  const autoHits   = clamp(accurateX || 0, 0, attackDice);
+  const rolledDice = attackDice - autoHits;
+
+  // Attack dice probabilities
+  // Lethal X+: rolls ≥ X are crits; crit face count = 7 - lethalX (default: only 6 is crit → 1 face)
+  const critFaces = lethalX > 0 ? clamp(7 - lethalX, 0, 6) : 1;
+  const pc = critFaces / 6;
+  const ph = Math.max(0, (7 - bs) / 6 - pc);
+
+  let rawDist = rollDistribution(rolledDice, pc, ph, relentless);
+
+  // Ceaseless: reroll all dice showing the most common fail face
+  if (ceaseless) {
+    const numFailFaces = Math.max(0, bs - 1);
+    rawDist = applyCeaselessTransform(rawDist, rolledDice, pc, ph, numFailFaces);
+  }
+
+  // Balanced: re-roll exactly 1 failed die, accept new result (each die rerolled at most once)
+  let dist = rawDist;
+  if (balanced && rolledDice > 0) {
+    const pmB = Math.max(0, 1 - pc - ph);
+    const rerolled = Array.from({ length: rolledDice + 1 }, () => new Float64Array(rolledDice + 1));
+    for (let c = 0; c <= rolledDice; c++) {
+      for (let h = 0; h <= rolledDice - c; h++) {
+        const m = rolledDice - c - h;
+        const p = dist[c][h];
+        if (p < 1e-15) continue;
+        if (m >= 1) {
+          rerolled[c + 1][h] += p * pc;
+          rerolled[c][h + 1] += p * ph;
+          rerolled[c][h]     += p * pmB;
+        } else {
+          rerolled[c][h] += p;
+        }
+      }
+    }
+    dist = rerolled;
+  }
+
+  // Purity Seal: if misses ≥ 2 → delete one miss, convert one to normal hit
+  if (puritySeal && rolledDice > 0) {
+    const transformed = Array.from({ length: rolledDice + 1 }, () => new Float64Array(rolledDice + 1));
+    for (let c = 0; c <= rolledDice; c++) {
+      for (let h = 0; h <= rolledDice - c; h++) {
+        const m = rolledDice - c - h;
+        const p = dist[c][h];
+        if (p < 1e-15) continue;
+        transformed[c][m >= 2 ? h + 1 : h] += p;
+      }
+    }
+    dist = transformed;
+  }
+
+  // Defence dice after Piercing (Invulnerable Save ignores Piercing)
+  const d = Math.max(0, defDice - (invulnSave ? 0 : ap));
+
+  // Per-die save probabilities
+  // rolls ≥ critSave → crit save; rolls ≥ save and < critSave → normal save; rest → fail
+  const pCritSave = Math.max(0, (7 - saveCritRoll) / 6);
+  const pNormSave = Math.max(0, (saveCritRoll - saveRoll) / 6);
+  // pFailSave = 1 - pCritSave - pNormSave
+
+  const dmgMap = new Map();
+
+  for (let c = 0; c <= rolledDice; c++) {
+    for (let h = 0; h <= rolledDice - c; h++) {
+      const pAtk = dist[c][h];
+      if (pAtk < 1e-15) continue;
+
+      const fails = rolledDice - c - h;
+
+      // Post-roll attacker modifiers
+      let fc = c;
+      let fh = h + autoHits;
+      // h = rolled normals only (used for Rending eligibility — auto-hits don't count)
+
+      // Punishing: if ≥1 crit retained and ≥1 fail, convert one fail → normal
+      if (punishing && fc >= 1 && fails >= 1) fh += 1;
+
+      // Severe: if 0 crits retained and ≥1 normal, convert one normal → crit
+      if (severe && fc === 0 && fh >= 1) { fc += 1; fh -= 1; }
+
+      // Rending: if ≥1 crit retained and ≥1 *rolled* normal, convert ONE → crit
+      // (auto-hits from Accurate don't satisfy Rending's "HIT result" condition)
+      if (rending && fc >= 1 && h >= 1) { fc += 1; fh -= 1; }
+
+      // Normal to Crit: if ≥1 normal, convert one → crit (regardless of existing crits)
+      if (normalToCrit && fh >= 1) { fc += 1; fh -= 1; }
+
+      // Devastating MWx: each crit deals mw immediate mortal wounds (unsaveable)
+      // Crits STILL enter the save pool and surviving crits deal critDmg on top.
+      const mortalWounds = devastating ? fc * mw : 0;
+      const attackCrits = fc;
+
+      // Iterate over all defender save dice outcomes (cs crit saves, ns normal saves)
+      for (let cs = 0; cs <= d; cs++) {
+        for (let ns = 0; ns <= d - cs; ns++) {
+          const fs = d - cs - ns;
+          const pSave = C(d, cs) * C(d - cs, ns)
+            * Math.pow(pCritSave, cs)
+            * Math.pow(pNormSave, ns)
+            * Math.pow(1 - pCritSave - pNormSave, fs);
+          if (pSave < 1e-15) continue;
+
+          // Brutal: normal saves don't work — pass ns=0
+          const nsEff = brutal ? 0 : ns;
+          const dmg = mortalWounds + applyOptimalSaves(attackCrits, fh, cs, nsEff, dmgCrit, dmgNorm);
+          const dmgKey = Math.round(dmg * 10) / 10;
+          dmgMap.set(dmgKey, (dmgMap.get(dmgKey) || 0) + pAtk * pSave);
+        }
+      }
+    }
+  }
+
+  let avgDamage = 0, killChance = 0;
+  const distribution = [];
   for (const [dmg, prob] of dmgMap) {
     avgDamage += dmg * prob;
     if (dmg >= wounds) killChance += prob;
     distribution.push({ totalDmg: dmg, prob });
   }
-
   distribution.sort((a, b) => a.totalDmg - b.totalDmg);
 
   return { avgDamage, killChance, distribution };
 }
+
+/** Placeholder — fighting tab math to be implemented */
+function computeDamage() { return 0; }
 
 /**
  * Fighting calculator — simulates melee exchange.
@@ -212,8 +343,8 @@ function calcFighting({
   const pc_def = critFaces / 6;
   const ph_def = Math.max(0, (7 - defWs) / 6 - pc_def);
 
-  const atkDist = rollDistribution(atkDice, pc_atk, ph_atk, atkCeaseless, atkRelentless);
-  const defDist = rollDistribution(defDice, pc_def, ph_def, defCeaseless, defRelentless);
+  const atkDist = rollDistribution(atkDice, pc_atk, ph_atk, atkRelentless);
+  const defDist = rollDistribution(defDice, pc_def, ph_def, defRelentless);
 
   // For each combination, compute damage dealt by each side
   // Fighting is deterministic given rolls (no saving throws in melee? Actually in KT melee uses saves too)
@@ -459,9 +590,16 @@ const WS_OPTIONS = [
 ];
 const LETHAL_OPTIONS = [
   { value: 0, label: 'None' },
+  { value: 3, label: 'Lethal 3+' },
   { value: 4, label: 'Lethal 4+' },
   { value: 5, label: 'Lethal 5+' },
-  { value: 6, label: 'Lethal 6+' },
+];
+const ACCURATE_OPTIONS = [
+  { value: 0, label: 'None' },
+  { value: 1, label: 'Accurate 1' },
+  { value: 2, label: 'Accurate 2' },
+  { value: 3, label: 'Accurate 3' },
+  { value: 4, label: 'Accurate 4' },
 ];
 const MW_OPTIONS = [
   { value: 1, label: 'MW 1' },
@@ -472,11 +610,11 @@ const MW_OPTIONS = [
 
 // ── Default state ─────────────────────────────────────────────────────────────
 const SHOOT_DEFAULTS = {
-  attackDice: 4, bs: 3, lethalX: 0,
+  attackDice: 4, bs: 3, lethalX: 0, accurateX: 0,
   dmgNorm: 3, dmgCrit: 4, ap: 0,
-  saveRoll: 5, saveCritRoll: 6, wounds: 8,
+  defDice: 3, saveRoll: 4, saveCritRoll: 6, wounds: 8,
   severe: false, rending: false, devastating: false, mw: 1,
-  brutal: false, ceaseless: false, relentless: false, punishing: false,
+  brutal: false, ceaseless: false, relentless: false, punishing: false, puritySeal: false, balanced: false, normalToCrit: false, invulnSave: false,
 };
 
 const FIGHT_DEFAULTS = {
@@ -510,9 +648,11 @@ function ShootingTab() {
     attackDice: parseNum(sp.get('s_ad'), SHOOT_DEFAULTS.attackDice),
     bs:         parseNum(sp.get('s_bs'), SHOOT_DEFAULTS.bs),
     lethalX:    parseNum(sp.get('s_lx'), SHOOT_DEFAULTS.lethalX),
+    accurateX:  parseNum(sp.get('s_ac'), SHOOT_DEFAULTS.accurateX),
     dmgNorm:    parseNum(sp.get('s_dn'), SHOOT_DEFAULTS.dmgNorm),
     dmgCrit:    parseNum(sp.get('s_dc'), SHOOT_DEFAULTS.dmgCrit),
     ap:         parseNum(sp.get('s_ap'), SHOOT_DEFAULTS.ap),
+    defDice:    parseNum(sp.get('s_dd'), SHOOT_DEFAULTS.defDice),
     saveRoll:   parseNum(sp.get('s_sv'), SHOOT_DEFAULTS.saveRoll),
     saveCritRoll: parseNum(sp.get('s_cs'), SHOOT_DEFAULTS.saveCritRoll),
     wounds:     parseNum(sp.get('s_w'),  SHOOT_DEFAULTS.wounds),
@@ -524,6 +664,10 @@ function ShootingTab() {
     ceaseless:  parseBool(sp.get('s_ce')),
     relentless: parseBool(sp.get('s_rl')),
     punishing:  parseBool(sp.get('s_pu')),
+    puritySeal: parseBool(sp.get('s_ps')),
+    balanced:     parseBool(sp.get('s_ba')),
+    normalToCrit: parseBool(sp.get('s_nc')),
+    invulnSave:   parseBool(sp.get('s_is')),
   }));
 
   const set = useCallback((key, val) => setS(prev => ({ ...prev, [key]: val })), []);
@@ -533,13 +677,17 @@ function ShootingTab() {
   function copyLink() {
     const p = new URLSearchParams({
       tab: 'shooting',
-      s_ad: s.attackDice, s_bs: s.bs, s_lx: s.lethalX,
+      s_ad: s.attackDice, s_bs: s.bs, s_lx: s.lethalX, s_ac: s.accurateX,
       s_dn: s.dmgNorm, s_dc: s.dmgCrit, s_ap: s.ap,
-      s_sv: s.saveRoll, s_cs: s.saveCritRoll, s_w: s.wounds,
+      s_dd: s.defDice, s_sv: s.saveRoll, s_cs: s.saveCritRoll, s_w: s.wounds,
       s_se: s.severe ? '1' : '0', s_re: s.rending ? '1' : '0',
       s_dv: s.devastating ? '1' : '0', s_mw: s.mw,
       s_br: s.brutal ? '1' : '0', s_ce: s.ceaseless ? '1' : '0',
       s_rl: s.relentless ? '1' : '0', s_pu: s.punishing ? '1' : '0',
+      s_ps: s.puritySeal ? '1' : '0',
+      s_ba: s.balanced     ? '1' : '0',
+      s_nc: s.normalToCrit ? '1' : '0',
+      s_is: s.invulnSave   ? '1' : '0',
     });
     navigator.clipboard.writeText(window.location.origin + '/calculator?' + p.toString());
   }
@@ -556,33 +704,63 @@ function ShootingTab() {
           <SelectField label="Ballistic Skill" value={s.bs} onChange={v => set('bs', v)} options={BS_OPTIONS} />
           <Stepper label="Dmg (Normal)" value={s.dmgNorm} onChange={v => set('dmgNorm', v)} min={1} max={20} />
           <Stepper label="Dmg (Crit)" value={s.dmgCrit} onChange={v => set('dmgCrit', v)} min={1} max={20} />
-          <SelectField label="Lethal" value={s.lethalX} onChange={v => set('lethalX', v)} options={LETHAL_OPTIONS} />
-          <Stepper label="AP" value={s.ap} onChange={v => set('ap', v)} min={0} max={6} />
         </div>
 
         <SectionHeader>Special Rules</SectionHeader>
         <div className="grid grid-cols-2 gap-2">
-          <Toggle label="Severe"     checked={s.severe}     onChange={v => set('severe', v)} />
-          <Toggle label="Rending"    checked={s.rending}    onChange={v => set('rending', v)} />
-          <Toggle label="Ceaseless"  checked={s.ceaseless}  onChange={v => set('ceaseless', v)} />
-          <Toggle label="Relentless" checked={s.relentless} onChange={v => set('relentless', v)} />
-          <Toggle label="Brutal"     checked={s.brutal}     onChange={v => set('brutal', v)} />
-          <Toggle label="Punishing"  checked={s.punishing}  onChange={v => set('punishing', v)} />
-          <div className="col-span-2">
-            <Toggle label="Devastating" checked={s.devastating} onChange={v => set('devastating', v)} />
-            {s.devastating && (
-              <div className="mt-2 pl-4">
-                <SelectField label="Mortal Wounds" value={s.mw} onChange={v => set('mw', v)} options={MW_OPTIONS} />
-              </div>
-            )}
-          </div>
+          {/* Row 1–4: simple toggles, 2 per row */}
+          <Toggle label="Severe"         checked={s.severe}       onChange={v => set('severe', v)} />
+          <Toggle label="Rending"        checked={s.rending}      onChange={v => set('rending', v)} />
+          <Toggle label="Ceaseless"      checked={s.ceaseless}    onChange={v => set('ceaseless', v)} />
+          <Toggle label="Relentless"     checked={s.relentless}   onChange={v => set('relentless', v)} />
+          <Toggle label="Brutal"         checked={s.brutal}       onChange={v => set('brutal', v)} />
+          <Toggle label="Punishing"      checked={s.punishing}    onChange={v => set('punishing', v)} />
+          <Toggle label="Purity Seal"    checked={s.puritySeal}   onChange={v => set('puritySeal', v)} />
+          <Toggle label="Balanced"       checked={s.balanced}     onChange={v => set('balanced', v)} />
+          {/* Row 5: Normal to Crit | Devastating */}
+          <Toggle label="Normal to Crit" checked={s.normalToCrit} onChange={v => set('normalToCrit', v)} />
+          <Toggle label="Devastating"    checked={s.devastating}  onChange={v => set('devastating', v)} />
+          {s.devastating && (
+            <div className="col-span-2 pl-4">
+              <SelectField label="Mortal Wounds" value={s.mw} onChange={v => set('mw', v)} options={MW_OPTIONS} />
+            </div>
+          )}
+          {/* Row 6: Lethal | Accurate */}
+          <Toggle label="Lethal"   checked={s.lethalX > 0}   onChange={v => set('lethalX',  v ? 5 : 0)} />
+          <Toggle label="Accurate" checked={s.accurateX > 0} onChange={v => set('accurateX', v ? 1 : 0)} />
+          {s.lethalX > 0 && (
+            <div className="col-span-2 pl-4">
+              <SelectField label="Lethal" value={s.lethalX} onChange={v => set('lethalX', v)} options={LETHAL_OPTIONS.filter(o => o.value > 0)} />
+            </div>
+          )}
+          {s.accurateX > 0 && (
+            <div className="col-span-2 pl-4">
+              <SelectField label="Accurate" value={s.accurateX} onChange={v => set('accurateX', v)} options={ACCURATE_OPTIONS.filter(o => o.value > 0)} />
+            </div>
+          )}
+          {/* Row 7: Piercing (lone — 13 toggles total, one must be solo) */}
+          <Toggle label="Piercing" checked={s.ap > 0} onChange={v => set('ap', v ? 1 : 0)} />
+          <div />
+          {s.ap > 0 && (
+            <div className="col-span-2 pl-4">
+              <Stepper label="Piercing" value={s.ap} onChange={v => set('ap', v)} min={1} max={3} />
+            </div>
+          )}
         </div>
 
         <SectionHeader>Target</SectionHeader>
         <div className="grid grid-cols-2 gap-3">
-          <SelectField label="Save"      value={s.saveRoll}    onChange={v => set('saveRoll', v)}    options={SAVE_OPTIONS} />
-          <SelectField label="Crit Save" value={s.saveCritRoll} onChange={v => set('saveCritRoll', v)} options={SAVE_OPTIONS} />
-          <Stepper     label="Wounds"    value={s.wounds}       onChange={v => set('wounds', v)}      min={1} max={30} />
+          <Stepper     label="Defence Dice" value={s.defDice}      onChange={v => set('defDice', v)}      min={1} max={6} />
+          <SelectField label="Save"         value={s.saveRoll}     onChange={v => set('saveRoll', v)}     options={SAVE_OPTIONS} />
+          <SelectField label="Crit Save"    value={s.saveCritRoll} onChange={v => set('saveCritRoll', v)} options={SAVE_OPTIONS} />
+          <Stepper     label="Wounds"       value={s.wounds}       onChange={v => set('wounds', v)}       min={1} max={30} />
+        </div>
+        <p className="text-[#5a5a7a] text-xs mt-1">Standard KT24: 3 defence dice, crit save 6+</p>
+        <div className="mt-2">
+          <Toggle label="Invulnerable Save" checked={s.invulnSave} onChange={v => set('invulnSave', v)} />
+          {s.invulnSave && (
+            <p className="text-[#6a6a7a] text-xs mt-1 pl-11">Piercing has no effect on this target.</p>
+          )}
         </div>
 
         <div className="flex gap-2 mt-4">
