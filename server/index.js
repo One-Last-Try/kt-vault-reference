@@ -46,6 +46,6 @@ app.use('/api/teams', teamsRouter);
 app.use('/api/changelog', changelogRouter);
 app.use('/api/admin', adminRouter);
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
