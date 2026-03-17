@@ -283,7 +283,7 @@ function Footer() {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function Home() {
   return (
-    <div id="main-content" className="min-h-[calc(100vh-52px)] flex flex-col">
+    <div id="main-content" className="min-h-[calc(100vh-80px)] flex flex-col">
       <Hero />
       <QuickAccess />
       <ChangelogSnapshot />

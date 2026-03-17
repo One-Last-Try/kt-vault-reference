@@ -168,7 +168,7 @@ export default function Changelog() {
   const contentTypes = ['all', 'rule', 'datacard', 'team_rule'];
 
   return (
-    <div id="main-content" className="min-h-[calc(100vh-52px)] p-6">
+    <div id="main-content" className="min-h-[calc(100vh-80px)] p-6">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">

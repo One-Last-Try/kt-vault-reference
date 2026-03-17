@@ -381,7 +381,7 @@ export default function TierMaker() {
     : containers.pool.filter(f => f.faction_group === groupFilter);
 
   return (
-    <div id="main-content" className="flex flex-col h-[calc(100vh-52px)] overflow-y-auto p-6">
+    <div id="main-content" className="flex flex-col h-[calc(100vh-80px)] overflow-y-auto p-6">
       <div className="max-w-5xl mx-auto w-full">
         <div className="flex items-center justify-between mb-5 gap-4 flex-wrap">
           <div className="flex items-center gap-2 flex-wrap">

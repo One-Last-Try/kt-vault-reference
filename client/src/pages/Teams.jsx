@@ -349,9 +349,9 @@ export default function Teams() {
   }
 
   return (
-    <div id="main-content" className="flex h-[calc(100vh-52px)]">
-      {/* Faction panel */}
-      <div className={`overflow-y-auto transition-all duration-300 ${selected ? 'w-[260px] shrink-0 border-r border-[#1e1e2e]' : 'w-full'}`}>
+    <div id="main-content" className="flex h-[calc(100vh-80px)]">
+      {/* Faction panel — hidden on mobile once a team is selected */}
+      <div className={`overflow-y-auto transition-all duration-300 ${selected ? 'hidden md:block md:w-[260px] md:shrink-0 md:border-r md:border-[#1e1e2e]' : 'w-full'}`}>
         <div className="p-5">
           {!selected && (
             <div className="flex gap-2 mb-5 flex-wrap" role="group" aria-label="Filter by faction group">
@@ -407,6 +407,34 @@ export default function Teams() {
       {/* Detail panel */}
       {selected && (
         <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Mobile team selector */}
+          <div className="md:hidden flex items-center gap-2 px-3 py-2 border-b border-[#1e1e2e] bg-[#0d0c15]">
+            <button
+              onClick={() => { setSelected(null); setTeamRules([]); setOperatives([]); setActiveTab('faction_rules'); }}
+              className="shrink-0 text-[#8a8a9a] hover:text-[#e0e0f0] px-1 py-1 text-lg leading-none"
+              aria-label="Back to all factions"
+            >←</button>
+            <select
+              value={selected.id}
+              onChange={e => {
+                const f = factions.find(f => String(f.id) === e.target.value);
+                if (f) selectFaction(f);
+              }}
+              className="flex-1 bg-[#1a1a2e] border border-[#2a2a3e] rounded-lg px-3 py-2 text-sm text-[#f0f0f0] focus:border-[#D94819]/60 focus:outline-none"
+              aria-label="Select faction"
+            >
+              {groups.map(group => {
+                const gf = factions.filter(f => f.faction_group === group);
+                if (!gf.length) return null;
+                return (
+                  <optgroup key={group} label={group}>
+                    {gf.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </optgroup>
+                );
+              })}
+            </select>
+          </div>
+
           {/* Tab bar */}
           <div className="px-4 py-0 border-b border-[#1e1e2e] bg-[#0d0c15] flex items-center gap-0 overflow-x-auto" role="tablist">
             <p className="text-[#f0f0f0] font-medium text-sm px-4 py-3 shrink-0 border-r border-[#1e1e2e] mr-2">{selected.name}</p>

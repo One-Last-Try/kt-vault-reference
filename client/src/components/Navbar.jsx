@@ -15,7 +15,7 @@ export default function Navbar() {
 
   return (
     <>
-      <nav className="bg-[#0d0c15] border-b border-[#1e1e2e] h-[52px] flex items-center px-4 md:px-6 gap-1 relative z-50">
+      <nav className="bg-[#0d0c15] border-b border-[#1e1e2e] h-[80px] flex items-center px-4 md:px-6 gap-1 relative z-50">
         <Link to="/" className="mr-4 md:mr-6 shrink-0 flex items-center">
           <img src="/KTVault_logo.png" alt="KTVault" className="h-[72px] w-auto" />
         </Link>
@@ -60,7 +60,7 @@ export default function Navbar() {
 
       {/* Mobile drawer */}
       {open && (
-        <div id="mobile-nav" className="md:hidden fixed inset-0 top-[52px] z-40 bg-[#0d0c15]/95 backdrop-blur-sm border-t border-[#1e1e2e]">
+        <div id="mobile-nav" className="md:hidden fixed inset-0 top-[80px] z-40 bg-[#0d0c15]/95 backdrop-blur-sm border-t border-[#1e1e2e]">
           <div className="flex flex-col p-4 gap-1">
             {links.map(({ to, label, color }) => {
               const isActive = location.pathname === to;

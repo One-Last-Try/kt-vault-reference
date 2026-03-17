@@ -73,7 +73,7 @@ export default function Rules() {
   }, [debouncedSearch, category]);
 
   return (
-    <div id="main-content" className="flex h-[calc(100vh-52px)]">
+    <div id="main-content" className="flex h-[calc(100vh-80px)]">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-[200px] shrink-0 bg-[var(--nav)] border-r border-[var(--border)] py-4 flex-col overflow-y-auto">
         <p className="text-[#7a7a8a] text-xs uppercase tracking-widest px-4 mb-3">Category</p>

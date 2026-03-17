@@ -127,7 +127,7 @@ export default function Datacards() {
   }, [debouncedSearch, faction]);
 
   return (
-    <div id="main-content" className="flex flex-col h-[calc(100vh-52px)]">
+    <div id="main-content" className="flex flex-col h-[calc(100vh-80px)]">
       <div className="px-4 md:px-6 py-3 border-b border-[var(--border)] bg-[var(--nav)] flex flex-col sm:flex-row gap-2">
         <label htmlFor="datacards-search" className="sr-only">Search operatives</label>
         <input id="datacards-search" type="text" placeholder="Search operatives…" value={search}

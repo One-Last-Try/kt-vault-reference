@@ -30,7 +30,7 @@ function LoginForm({ onLogin }) {
   }
 
   return (
-    <div className="flex items-center justify-center h-[calc(100vh-52px)]">
+    <div className="flex items-center justify-center h-[calc(100vh-80px)]">
       <form onSubmit={handleSubmit} className="bg-[#1a1a2e] border border-[#2a2a3e] rounded-xl p-8 w-full max-w-sm">
         <div className="flex justify-center mb-6">
           <img src="/KTVault_logo.png" alt="KTVault" className="h-10 w-auto" />
