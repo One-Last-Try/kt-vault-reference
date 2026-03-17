@@ -4,6 +4,7 @@ const links = [
   { to: '/',           label: 'Home' },
   { to: '/rules',      label: 'Rules' },
   { to: '/teams',      label: 'Teams' },
+  { to: '/calculator', label: 'Calculator', color: 'text-[#3cc8c8]' },
   { to: '/tier-maker', label: 'Tier Maker', color: 'text-[#a88be0]' },
   { to: '/changelog',  label: 'Changelog',  color: 'text-[#e0a83c]' },
 ];

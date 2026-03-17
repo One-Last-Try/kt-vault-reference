@@ -11,6 +11,7 @@ import TierMaker from './pages/TierMaker'
 import Changelog from './pages/Changelog'
 import Admin from './pages/Admin'
 import SearchResults from './pages/SearchResults'
+import Calculator from './pages/Calculator'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -30,6 +31,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/changelog" element={<Changelog />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/search" element={<SearchResults />} />
+        <Route path="/calculator" element={<Calculator />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
