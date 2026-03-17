@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import EmptyState from '../components/EmptyState';
 
@@ -28,10 +29,10 @@ function SkeletonCard() {
   );
 }
 
-function RuleCard({ rule }) {
+function RuleCard({ rule, highlighted }) {
   const badgeClass = CATEGORY_COLOURS[rule.category] || 'bg-gray-800/60 text-gray-300';
   return (
-    <div className="kt-card p-4 hover:border-[#D94819]/60 hover:bg-[#D94819]/5">
+    <div id={'rule-' + rule.id} className={`kt-card p-4 hover:border-[#D94819]/60 hover:bg-[#D94819]/5${highlighted ? ' border-[#D94819] bg-[#D94819]/10' : ''}`}>
       <div className="flex items-start justify-between gap-3 mb-2">
         <h3 className="text-[var(--text)] font-medium text-sm">{rule.title}</h3>
         <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${badgeClass}`}>{rule.category}</span>
@@ -50,6 +51,9 @@ function RuleCard({ rule }) {
 }
 
 export default function Rules() {
+  const [searchParams] = useSearchParams();
+  const highlightId = searchParams.get('highlight');
+
   const [rules, setRules]               = useState([]);
   const [loading, setLoading]           = useState(false);
   const [search, setSearch]             = useState('');
@@ -71,6 +75,13 @@ export default function Rules() {
       .catch(() => setRules([]))
       .finally(() => setLoading(false));
   }, [debouncedSearch, category]);
+
+  useEffect(() => {
+    if (!loading && highlightId) {
+      const el = document.getElementById('rule-' + highlightId);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [highlightId, loading]);
 
   return (
     <div id="main-content" className="flex h-[calc(100vh-80px)]">
@@ -123,7 +134,7 @@ export default function Rules() {
           ) : (
             <>
               <p className="text-[#7a7a8a] text-xs mb-4">{rules.length} rule{rules.length !== 1 ? 's' : ''}</p>
-              <div className="grid gap-3">{rules.map(r => <RuleCard key={r.id} rule={r} />)}</div>
+              <div className="grid gap-3">{rules.map(r => <RuleCard key={r.id} rule={r} highlighted={String(r.id) === highlightId} />)}</div>
             </>
           )}
         </div>

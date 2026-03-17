@@ -4,13 +4,6 @@ import axios from 'axios';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-const FILTER_PILLS = [
-  { label: 'Rules',   to: '/rules' },
-  { label: 'Teams',   to: '/teams' },
-  { label: 'Tac Ops', to: '/teams?tab=tac_op' },
-  { label: 'Ploys',   to: '/teams?tab=ploy' },
-];
-
 const TIER_PREVIEW = [
   { id: 'S', colour: '#FFD700', chips: ['Angels of Death', 'Deathwatch', 'Kasrkin'] },
   { id: 'A', colour: '#D94819', chips: ['Scout Squad', 'Pathfinders', 'Kommandos', 'Legionaries'] },
@@ -65,15 +58,6 @@ function Hero() {
         </button>
       </form>
 
-      {/* Filter pills */}
-      <div className="flex flex-wrap justify-center gap-2" aria-label="Browse by content type">
-        {FILTER_PILLS.map(p => (
-          <Link key={p.label} to={p.to}
-            className="text-xs px-3 py-1.5 rounded-full border border-[#2a2a3e] text-[#8a8a9a] hover:text-[#e0e0f0] hover:border-[#D94819]/60 transition-colors">
-            {p.label}
-          </Link>
-        ))}
-      </div>
     </section>
   );
 }

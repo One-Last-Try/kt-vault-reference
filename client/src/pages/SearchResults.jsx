@@ -21,6 +21,12 @@ function highlight(text, query) {
   );
 }
 
+function getTo(item) {
+  if (item._type === 'rule') return `/rules?highlight=${item.id}`;
+  if (item._type === 'datacard') return `/teams?faction=${item.faction_id}&tab=operative&highlight=${item.id}`;
+  return '/teams';
+}
+
 function ResultCard({ item, query }) {
   const meta = TYPE_META[item._type] || { label: item._type, badge: 'bg-gray-800 text-gray-300', to: '/' };
   const title = item.title || item.operative_name || item.name || '—';
@@ -28,7 +34,7 @@ function ResultCard({ item, query }) {
   const body  = item.content || item.description || '';
 
   return (
-    <Link to={meta.to} className="block bg-[#1a1a2e] rounded-lg p-4 border border-[#2a2a3e] hover:border-[#D94819]/60 hover:bg-[#D94819]/5 transition-colors">
+    <Link to={getTo(item)} className="block bg-[#1a1a2e] rounded-lg p-4 border border-[#2a2a3e] hover:border-[#D94819]/60 hover:bg-[#D94819]/5 transition-colors">
       <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
         <p className="text-[#f0f0f0] text-sm font-medium">{highlight(title, query)}</p>
         <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${meta.badge}`}>

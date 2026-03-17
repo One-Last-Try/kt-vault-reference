@@ -200,13 +200,13 @@ function RuleCard({ rule }) {
 }
 
 // ── Operative card ────────────────────────────────────────────────────────────
-function OperativeCard({ op }) {
+function OperativeCard({ op, highlighted }) {
   const stats    = (() => { try { return JSON.parse(op.stats_json    || '{}'); } catch { return {}; } })();
   const weapons  = (() => { try { return JSON.parse(op.weapons_json  || '[]'); } catch { return []; } })();
   const abilities = (() => { try { return JSON.parse(op.abilities_json || '[]'); } catch { return []; } })();
 
   return (
-    <div className="bg-[#1a1a2e] rounded-lg border border-[#2a2a3e] overflow-hidden">
+    <div id={'datacard-' + op.id} className={`bg-[#1a1a2e] rounded-lg border overflow-hidden${highlighted ? ' ring-2 ring-[#D94819]/60 border-[#D94819]' : ' border-[#2a2a3e]'}`}>
       {/* Header */}
       <div className="bg-[#D94819]/10 border-b border-[#D94819]/20 px-4 py-2.5">
         <p className="text-[#f0f0f0] font-bold text-sm uppercase tracking-wide">{op.operative_name}</p>
@@ -278,6 +278,8 @@ function OperativeCard({ op }) {
 export default function Teams() {
   const [searchParams] = useSearchParams();
   const urlTab = searchParams.get('tab'); // e.g. 'tac_op' or 'ploy'
+  const urlFactionId = searchParams.get('faction');
+  const urlHighlight = searchParams.get('highlight');
 
   const [factions, setFactions]     = useState([]);
   const [selected, setSelected]     = useState(null);
@@ -294,6 +296,18 @@ export default function Teams() {
       .then(res => setFactions(res.data))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!urlFactionId || !factions.length || selected) return;
+    const f = factions.find(f => String(f.id) === urlFactionId);
+    if (f) selectFaction(f);
+  }, [factions, urlFactionId]);
+
+  useEffect(() => {
+    if (!urlHighlight || loading || activeTab !== 'operative') return;
+    const el = document.getElementById('datacard-' + urlHighlight);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [urlHighlight, loading, activeTab]);
 
   useEffect(() => {
     if (!selected) return;
@@ -518,7 +532,7 @@ export default function Teams() {
                 <>
                   <p className="text-[#7a7a8a] text-xs mb-4">{operatives.length} operative{operatives.length !== 1 ? 's' : ''}</p>
                   <div className="grid gap-4 grid-cols-1 xl:grid-cols-2">
-                    {operatives.map(op => <OperativeCard key={op.id} op={op} />)}
+                    {operatives.map(op => <OperativeCard key={op.id} op={op} highlighted={String(op.id) === urlHighlight} />)}
                   </div>
                 </>
               )
